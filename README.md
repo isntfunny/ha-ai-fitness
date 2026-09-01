@@ -1,15 +1,29 @@
-# AI Fitness — Studioauslastung für Home Assistant
+# AI Fitness — Auslastung & Check-ins für Home Assistant
 
 [![hacs][hacs-badge]][hacs]
 
-Zeigt die **Live-Auslastung** deines AI-Fitness-Studios (all inclusive Fitness) in
-Home Assistant an.
+Bringt die **Live-Auslastung** deines AI-Fitness-Studios (all inclusive Fitness)
+und optional deine **Check-in-Historie** nach Home Assistant.
 
-Die Integration nutzt die **öffentliche** Auslastungs-API von `ai-fitness.de` —
-kein Account, kein Login, kein API-Key. Es ist dieselbe Quelle, die auch das
-Auslastungs-Widget auf den Studio-Seiten speist.
+Die Auslastung kommt aus der **öffentlichen** API von `ai-fitness.de` — kein
+Account, kein Login, kein API-Key; dieselbe Quelle wie das Auslastungs-Widget auf
+den Studio-Seiten. Für die Check-ins meldest du dich zusätzlich mit deinem
+App-Account an — das ist optional, die Auslastung funktioniert ohne.
 
 ## Features
+
+Die Integration kennt **zwei Eintragstypen**, die sich frei kombinieren lassen:
+
+| Eintrag | Login? | Liefert |
+|---------|--------|---------|
+| **Studio-Auslastung** | nein | Live-Auslastung eines Standorts — beliebig oft hinzufügbar |
+| **Mein Account** | ja | Deine Check-in-Historie — einmal pro Account |
+
+Check-ins sind account-weit (du kannst überall einchecken), die Auslastung ist
+pro Studio. Deshalb zwei Typen statt einem kombinierten Eintrag — sonst hättest
+du bei mehreren Studios doppelte Check-in-Sensoren.
+
+### Studio-Auslastung (ohne Login)
 
 - **Auslastung in %** für den aktuellen Zeitslot
 - **Auslastungsstufe** (`LOW` / `MEDIUM` / `HIGH`) als Enum-Sensor
@@ -18,6 +32,13 @@ Auslastungs-Widget auf den Studio-Seiten speist.
 - Die komplette Tageskurve als Attribut — direkt nutzbar für ApexCharts
 - Mehrere Studios parallel: einfach die Integration mehrfach hinzufügen
 - Studioliste wird **live** geladen — neue Standorte tauchen ohne Update auf
+
+### Mein Account (mit Login)
+
+- **Check-ins dieses Jahr / diesen Monat**
+- **Letzter Check-in** als Zeitstempel, inkl. Studio und Besuchsdauer
+- **Gerade im Studio** als Binary-Sensor — die Drehtür weiss, ob du noch drin bist
+- Monats-Breakdown als Attribut für ein Balkendiagramm
 
 ## Installation
 
@@ -36,6 +57,10 @@ kopieren und Home Assistant neu starten.
 
 *Einstellungen → Geräte & Dienste → Integration hinzufügen → **AI Fitness***
 
+Im ersten Schritt wählst du zwischen **Studio-Auslastung** und **Mein Account**.
+
+### Studio-Auslastung
+
 Es gibt drei Wege zum Studio:
 
 | Weg | Beschreibung |
@@ -44,8 +69,20 @@ Es gibt drei Wege zum Studio:
 | **Nach Name oder Ort suchen** | Freitextsuche über Studioname, Ort und PLZ |
 | **Studio-ID eingeben** | Direkt die numerische ID, falls du sie schon kennst |
 
-Das Abfrageintervall (Standard: 5 Minuten) lässt sich jederzeit über
-*Konfigurieren* am Integrationseintrag ändern.
+### Mein Account
+
+E-Mail und Passwort aus der AI-Fitness-App. Die Zugangsdaten werden lokal im
+Config-Entry gespeichert und ausschliesslich gegen die offizielle App-API
+verwendet. Läuft die Anmeldung ab, fragt Home Assistant per Reauth-Dialog nach.
+
+### Intervall
+
+Das Abfrageintervall lässt sich jederzeit über *Konfigurieren* am Eintrag ändern
+(Standard: **5 min** für Auslastung, **30 min** für Check-ins).
+
+> Die Auslastung wird serverseitig **alle paar Minuten** aktualisiert — nicht nur
+> stündlich. Gemessen: 17 % → 18 % innerhalb desselben Stundenslots. Ein Intervall
+> von 2–5 Minuten liefert also echten Mehrwert.
 
 ## Entitäten
 
@@ -57,6 +94,17 @@ Pro Studio wird ein Gerät mit diesen Entitäten angelegt:
 | `sensor.<studio>_auslastungsstufe` | Enum | `LOW`, `MEDIUM` oder `HIGH` |
 | `sensor.<studio>_tagesmaximum` | `%` | Höchstwert des Tages (deaktiviert per Default) |
 | `binary_sensor.<studio>_geoffnet` | `opening` | Ob das Studio gerade geöffnet hat |
+
+Beim Account-Eintrag:
+
+| Entität | Typ | Beschreibung |
+|---------|-----|--------------|
+| `sensor.<account>_checkins_dieses_jahr` | Zähler | Besuche im laufenden Jahr (Attribut `monthly`) |
+| `sensor.<account>_checkins_diesen_monat` | Zähler | Besuche im laufenden Monat |
+| `sensor.<account>_letzter_checkin` | `timestamp` | Beginn des letzten Besuchs |
+| `sensor.<account>_letztes_studio` | Text | Wo der letzte Besuch war |
+| `sensor.<account>_dauer_letzter_besuch` | `duration` (min) | Länge des letzten Besuchs |
+| `binary_sensor.<account>_gerade_im_studio` | `presence` | Eingecheckt und noch nicht ausgecheckt |
 
 ### Attribute des Auslastungs-Sensors
 
@@ -118,6 +166,8 @@ automation:
 
 ## Wie es funktioniert
 
+### Auslastung — öffentlich
+
 Zwei öffentliche Endpoints, beide ohne Authentifizierung:
 
 ```
@@ -135,12 +185,21 @@ braucht die Integration keine gepflegte Studioliste), der zweite die Auslastung.
 Dahinter steckt die **Magicline**-Studioverwaltung, über die auch die Check-ins
 am Drehkreuz laufen — daher die Live-Daten.
 
+### Check-ins — authentifiziert
+
+Der Account-Teil spricht dieselbe API wie die offizielle App
+(`api-allinclusive.tocc.dirs21.de`, OAuth2 Password Grant). Das Token gilt 24 h
+und wird über den Refresh-Token erneuert; der Refresh-Token rotiert bei jeder
+Nutzung und wird im Config-Entry mitgeführt.
+
 ## Hinweise
 
 - Ausserhalb der Öffnungszeiten markiert die API keinen Slot als aktuell. Die
   Auslastung ist dann `unknown` und `binary_sensor` steht auf `off`.
-- Die Daten sind stundenweise aufgelöst; ein Intervall unter 5 Minuten bringt
-  keine zusätzliche Genauigkeit. Bitte fair pollen.
+- Die Auslastung ist in Stundenslots gebucketet, der **aktuelle** Slot wird aber
+  alle paar Minuten nachgeführt. 2–5 Minuten Intervall sind sinnvoll, häufiger
+  bringt nichts. Bitte fair pollen.
+- Check-ins ändern sich höchstens ein paar Mal am Tag — 30 Minuten reichen dort.
 - Diese Integration ist ein inoffizielles Community-Projekt und steht in keiner
   Verbindung zu AI Fitness, Magicline oder ABC Fitness.
 

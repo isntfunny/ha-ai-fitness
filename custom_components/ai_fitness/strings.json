@@ -2,12 +2,11 @@
   "config": {
     "step": {
       "user": {
-        "title": "Add an AI Fitness studio",
-        "description": "How would you like to find your studio?",
+        "title": "Add AI Fitness",
+        "description": "What would you like to add?",
         "menu_options": {
-          "nearby": "Studios near me",
-          "search": "Search by name or town",
-          "manual": "Enter a studio ID"
+          "studio": "Studio utilization (no login)",
+          "account": "My account (check-ins)"
         }
       },
       "nearby": {
@@ -37,17 +36,44 @@
         "data": {
           "studio_id": "Studio ID"
         }
+      },
+      "studio": {
+        "title": "Find your studio",
+        "description": "How would you like to find it?",
+        "menu_options": {
+          "nearby": "Studios near me",
+          "search": "Search by name or town",
+          "manual": "Enter a studio ID"
+        }
+      },
+      "account": {
+        "title": "Log in",
+        "description": "Your AI Fitness app credentials. They are stored locally and only used to read your check-in history.",
+        "data": {
+          "username": "Email",
+          "password": "Password"
+        }
+      },
+      "reauth_confirm": {
+        "title": "Log in again",
+        "description": "The login for {username} expired. Please enter the password again.",
+        "data": {
+          "password": "Password"
+        }
       }
     },
     "error": {
       "no_match": "No studio matched that search term.",
-      "invalid_id": "A studio ID consists of digits only."
+      "invalid_id": "A studio ID consists of digits only.",
+      "invalid_auth": "Wrong email or password.",
+      "cannot_connect": "Could not reach the AI Fitness API."
     },
     "abort": {
       "already_configured": "This studio is already set up.",
       "cannot_connect": "Could not reach ai-fitness.de.",
       "no_studios": "The studio list came back empty.",
-      "no_utilization": "This studio does not publish any utilization data."
+      "no_utilization": "This studio does not publish any utilization data.",
+      "reauth_successful": "Login updated."
     }
   },
   "options": {
@@ -65,7 +91,9 @@
   },
   "entity": {
     "sensor": {
-      "utilization": { "name": "Utilization" },
+      "utilization": {
+        "name": "Utilization"
+      },
       "level": {
         "name": "Utilization level",
         "state": {
@@ -74,10 +102,32 @@
           "HIGH": "High"
         }
       },
-      "peak": { "name": "Daily peak" }
+      "peak": {
+        "name": "Daily peak"
+      },
+      "checkins_year": {
+        "name": "Check-ins this year"
+      },
+      "checkins_month": {
+        "name": "Check-ins this month"
+      },
+      "last_checkin": {
+        "name": "Last check-in"
+      },
+      "last_location": {
+        "name": "Last studio"
+      },
+      "last_duration": {
+        "name": "Last visit duration"
+      }
     },
     "binary_sensor": {
-      "open": { "name": "Open" }
+      "open": {
+        "name": "Open"
+      },
+      "in_gym": {
+        "name": "Currently in the gym"
+      }
     }
   }
 }

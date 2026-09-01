@@ -32,4 +32,4 @@ max-complexity = 25
 # EM101/EM102/TRY003: the API wrapper raises short, contextual messages inline;
 #   splitting each into a variable or an exception subclass adds noise here.
 [lint.extend-per-file-ignores]
-"custom_components/ai_fitness/*.py" = ["TC001", "TC002", "EM101", "EM102", "TRY003"]
+"custom_components/ai_fitness/*.py" = ["TC001", "TC002", "TC003", "EM101", "EM102", "TRY003"]

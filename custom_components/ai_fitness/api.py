@@ -11,6 +11,7 @@ the headers below must not be "helpfully" tightened.
 from __future__ import annotations
 
 import logging
+import time
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -21,6 +22,14 @@ _LOGGER = logging.getLogger(__name__)
 BASE_URL = "https://www.ai-fitness.de"
 STUDIOS_PATH = "/connect/v2/studio"
 UTILIZATION_PATH = "/connect/v1/studio/{studio_id}/utilization"
+
+# Authenticated member API (TOCC / DIRS21 backend behind the app).
+APP_BASE_URL = "https://api-allinclusive.tocc.dirs21.de"
+TOKEN_PATH = "/v1/oauth2/token"  # noqa: S105 - URL path, not a secret
+CHECKINS_YEAR_PATH = "/v1/sportable/statisticsdata/checkins/year"
+# The app identifies itself with this fixed public client id. Sending a
+# ``scope`` alongside it makes the endpoint answer 501, so never add one.
+OAUTH_CLIENT_ID = "AllInclusive"
 
 REQUEST_HEADERS = {
     # A browser-ish UA keeps the CDN happy.
@@ -45,6 +54,10 @@ class AiFitnessConnectionError(AiFitnessError):
 
 class AiFitnessStudioNotFoundError(AiFitnessError):
     """Raised when a studio id yields no utilization data."""
+
+
+class AiFitnessAuthError(AiFitnessError):
+    """Raised when login or token refresh fails."""
 
 
 @dataclass(slots=True)
@@ -189,3 +202,182 @@ async def async_get_utilization(
             f"No utilization data for studio {studio_id}"
         )
     return Utilization.from_api(payload)
+
+
+@dataclass(slots=True)
+class TokenBundle:
+    """OAuth2 tokens for the member API."""
+
+    access_token: str
+    refresh_token: str
+    expires_at: float
+
+    @property
+    def is_expired(self) -> bool:
+        """Return True when the access token is due for renewal."""
+        # Renew a minute early so an in-flight request never races expiry.
+        return time.time() >= self.expires_at - 60
+
+    @classmethod
+    def from_api(cls, raw: dict[str, Any]) -> TokenBundle:
+        """Build a TokenBundle from a token endpoint response."""
+        access = raw.get("access_token")
+        refresh = raw.get("refresh_token")
+        if not access or not refresh:
+            raise AiFitnessAuthError("Token response is missing tokens")
+        expires_in = raw.get("expires_in") or 3600
+        return cls(
+            access_token=str(access),
+            refresh_token=str(refresh),
+            expires_at=time.time() + float(expires_in),
+        )
+
+
+@dataclass(slots=True)
+class Checkin:
+    """A single gym visit."""
+
+    date: str
+    check_in: str | None
+    check_out: str | None
+    location: str | None
+
+    @property
+    def is_open_visit(self) -> bool:
+        """Return True while the member has not checked out again."""
+        return self.check_in is not None and self.check_out is None
+
+
+@dataclass(slots=True)
+class CheckinData:
+    """Parsed check-in statistics for the current year."""
+
+    year: int
+    total_year: int = 0
+    total_month: int = 0
+    monthly: dict[int, int] = field(default_factory=dict)
+    checkins: list[Checkin] = field(default_factory=list)
+
+    @property
+    def last(self) -> Checkin | None:
+        """Return the most recent visit."""
+        return self.checkins[0] if self.checkins else None
+
+    @property
+    def currently_in_gym(self) -> bool:
+        """Return True when the latest visit has no check-out yet."""
+        last = self.last
+        return bool(last and last.is_open_visit)
+
+    @classmethod
+    def from_api(cls, raw: dict[str, Any], year: int, month: int) -> CheckinData:
+        """Build CheckinData from the ``checkins/year`` payload."""
+        data = cls(year=year)
+
+        summary = raw.get("Summary") or {}
+        data.total_year = int(summary.get("TotalCount") or 0)
+
+        for bucket in raw.get("Breakdown") or []:
+            try:
+                data.monthly[int(bucket["Key"])] = int(bucket.get("Count") or 0)
+            except (KeyError, TypeError, ValueError):
+                continue
+        data.total_month = data.monthly.get(month, 0)
+
+        visits = [
+            Checkin(
+                date=str(entry.get("Date") or ""),
+                check_in=entry.get("CheckInTime"),
+                check_out=entry.get("CheckOutTime"),
+                location=entry.get("LocationName"),
+            )
+            for entry in (raw.get("Checkins") or [])
+        ]
+        # The API returns newest first, but do not rely on it.
+        visits.sort(key=lambda v: (v.date, v.check_in or ""), reverse=True)
+        data.checkins = visits
+        return data
+
+
+def _unwrap_envelope(payload: Any) -> dict[str, Any]:
+    """
+    Unwrap the ``{"Meta": ..., "Value": ...}`` envelope of the member API.
+
+    The backend answers HTTP 200 even for failures and signals the real result
+    through ``Meta.IsValid``, so the HTTP status alone must not be trusted.
+    """
+    if not isinstance(payload, dict):
+        raise AiFitnessConnectionError("Unexpected response shape")
+
+    meta = payload.get("Meta") or {}
+    value = payload.get("Value")
+    if not meta.get("IsValid") or value is None:
+        message = meta.get("Message") or "Request rejected by the API"
+        raise AiFitnessConnectionError(str(message))
+    if not isinstance(value, dict):
+        raise AiFitnessConnectionError("Unexpected payload value")
+    return value
+
+
+async def _async_token_request(
+    session: aiohttp.ClientSession, form: dict[str, str]
+) -> TokenBundle:
+    """POST to the token endpoint and parse the result."""
+    url = f"{APP_BASE_URL}{TOKEN_PATH}"
+    body = {"client_id": OAUTH_CLIENT_ID, **form}
+    try:
+        async with session.post(
+            url, data=body, headers=REQUEST_HEADERS, timeout=TIMEOUT
+        ) as response:
+            if response.status in (400, 401, 403):
+                raise AiFitnessAuthError("Invalid credentials or expired session")
+            response.raise_for_status()
+            payload = await response.json(content_type=None)
+    except aiohttp.ClientError as err:
+        raise AiFitnessConnectionError(f"Token request failed: {err}") from err
+    except (TimeoutError, ValueError) as err:
+        raise AiFitnessConnectionError(f"Bad token response: {err}") from err
+
+    return TokenBundle.from_api(payload)
+
+
+async def async_login(
+    session: aiohttp.ClientSession, username: str, password: str
+) -> TokenBundle:
+    """Log in with member credentials (OAuth2 password grant)."""
+    return await _async_token_request(
+        session,
+        {"grant_type": "password", "username": username, "password": password},
+    )
+
+
+async def async_refresh_token(
+    session: aiohttp.ClientSession, refresh_token: str
+) -> TokenBundle:
+    """Exchange a refresh token for a fresh token pair."""
+    return await _async_token_request(
+        session, {"grant_type": "refresh_token", "refresh_token": refresh_token}
+    )
+
+
+async def async_get_checkins(
+    session: aiohttp.ClientSession,
+    access_token: str,
+    year: int,
+    month: int,
+) -> CheckinData:
+    """Fetch this year's check-ins, including the per-month breakdown."""
+    url = f"{APP_BASE_URL}{CHECKINS_YEAR_PATH}?year={year}"
+    headers = {**REQUEST_HEADERS, "Authorization": f"Bearer {access_token}"}
+    try:
+        async with session.get(url, headers=headers, timeout=TIMEOUT) as response:
+            if response.status in (401, 403):
+                raise AiFitnessAuthError("Access token rejected")
+            response.raise_for_status()
+            payload = await response.json(content_type=None)
+    except aiohttp.ClientError as err:
+        raise AiFitnessConnectionError(f"Check-in request failed: {err}") from err
+    except (TimeoutError, ValueError) as err:
+        raise AiFitnessConnectionError(f"Bad check-in response: {err}") from err
+
+    return CheckinData.from_api(_unwrap_envelope(payload), year, month)

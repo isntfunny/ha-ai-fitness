@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Mapping
 from typing import Any
 
 import voluptuous as vol
@@ -12,6 +13,7 @@ from homeassistant.config_entries import (
     ConfigFlowResult,
     OptionsFlow,
 )
+from homeassistant.const import CONF_PASSWORD, CONF_USERNAME
 from homeassistant.core import callback
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.selector import (
@@ -23,22 +25,31 @@ from homeassistant.helpers.selector import (
     SelectSelectorConfig,
     SelectSelectorMode,
     TextSelector,
+    TextSelectorConfig,
+    TextSelectorType,
 )
 from homeassistant.util.location import distance
 
 from .api import (
+    AiFitnessAuthError,
     AiFitnessError,
     Studio,
     async_get_studios,
     async_get_utilization,
+    async_login,
 )
 from .const import (
+    CONF_ENTRY_TYPE,
     CONF_QUERY,
+    CONF_REFRESH_TOKEN,
     CONF_SCAN_INTERVAL,
     CONF_STUDIO_ID,
     CONF_STUDIO_NAME,
+    DEFAULT_ACCOUNT_SCAN_INTERVAL,
     DEFAULT_SCAN_INTERVAL,
     DOMAIN,
+    ENTRY_TYPE_ACCOUNT,
+    ENTRY_TYPE_STUDIO,
     MAX_SCAN_INTERVAL,
     MIN_SCAN_INTERVAL,
     NEARBY_LIMIT,
@@ -105,9 +116,19 @@ class AiFitnessConfigFlow(ConfigFlow, domain=DOMAIN):
         self,
         user_input: dict[str, Any] | None = None,  # noqa: ARG002
     ) -> ConfigFlowResult:
-        """Let the user choose how to find their studio."""
+        """Let the user pick between a studio and their member account."""
         return self.async_show_menu(
             step_id="user",
+            menu_options=["studio", "account"],
+        )
+
+    async def async_step_studio(
+        self,
+        user_input: dict[str, Any] | None = None,  # noqa: ARG002
+    ) -> ConfigFlowResult:
+        """Let the user choose how to find their studio."""
+        return self.async_show_menu(
+            step_id="studio",
             menu_options=["nearby", "search", "manual"],
         )
 
@@ -244,6 +265,7 @@ class AiFitnessConfigFlow(ConfigFlow, domain=DOMAIN):
         name = studio.name if studio else f"AI Fitness {studio_id}"
 
         data: dict[str, Any] = {
+            CONF_ENTRY_TYPE: ENTRY_TYPE_STUDIO,
             CONF_STUDIO_ID: studio_id,
             CONF_STUDIO_NAME: name,
         }
@@ -254,6 +276,98 @@ class AiFitnessConfigFlow(ConfigFlow, domain=DOMAIN):
             title=name,
             data=data,
             options={CONF_SCAN_INTERVAL: DEFAULT_SCAN_INTERVAL},
+        )
+
+    async def async_step_account(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Log in with member credentials to expose check-in data."""
+        errors: dict[str, str] = {}
+
+        if user_input is not None:
+            username = user_input[CONF_USERNAME].strip()
+            password = user_input[CONF_PASSWORD]
+
+            session = async_get_clientsession(self.hass)
+            try:
+                tokens = await async_login(session, username, password)
+            except AiFitnessAuthError:
+                errors["base"] = "invalid_auth"
+            except AiFitnessError:
+                errors["base"] = "cannot_connect"
+            else:
+                await self.async_set_unique_id(username.casefold())
+                self._abort_if_unique_id_configured()
+                return self.async_create_entry(
+                    title=username,
+                    data={
+                        CONF_ENTRY_TYPE: ENTRY_TYPE_ACCOUNT,
+                        CONF_USERNAME: username,
+                        CONF_PASSWORD: password,
+                        CONF_REFRESH_TOKEN: tokens.refresh_token,
+                    },
+                    options={CONF_SCAN_INTERVAL: DEFAULT_ACCOUNT_SCAN_INTERVAL},
+                )
+
+        return self.async_show_form(
+            step_id="account",
+            data_schema=vol.Schema(
+                {
+                    vol.Required(CONF_USERNAME): TextSelector(),
+                    vol.Required(CONF_PASSWORD): TextSelector(
+                        TextSelectorConfig(type=TextSelectorType.PASSWORD)
+                    ),
+                }
+            ),
+            errors=errors,
+        )
+
+    async def async_step_reauth(
+        self,
+        entry_data: Mapping[str, Any],  # noqa: ARG002
+    ) -> ConfigFlowResult:
+        """Handle an expired or revoked login."""
+        return await self.async_step_reauth_confirm()
+
+    async def async_step_reauth_confirm(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Ask for the password again and update the entry."""
+        entry = self._get_reauth_entry()
+        errors: dict[str, str] = {}
+
+        if user_input is not None:
+            password = user_input[CONF_PASSWORD]
+            username = entry.data[CONF_USERNAME]
+
+            session = async_get_clientsession(self.hass)
+            try:
+                tokens = await async_login(session, username, password)
+            except AiFitnessAuthError:
+                errors["base"] = "invalid_auth"
+            except AiFitnessError:
+                errors["base"] = "cannot_connect"
+            else:
+                return self.async_update_reload_and_abort(
+                    entry,
+                    data={
+                        **entry.data,
+                        CONF_PASSWORD: password,
+                        CONF_REFRESH_TOKEN: tokens.refresh_token,
+                    },
+                )
+
+        return self.async_show_form(
+            step_id="reauth_confirm",
+            data_schema=vol.Schema(
+                {
+                    vol.Required(CONF_PASSWORD): TextSelector(
+                        TextSelectorConfig(type=TextSelectorType.PASSWORD)
+                    )
+                }
+            ),
+            errors=errors,
+            description_placeholders={"username": entry.data[CONF_USERNAME]},
         )
 
 
@@ -270,9 +384,12 @@ class AiFitnessOptionsFlow(OptionsFlow):
                 data={CONF_SCAN_INTERVAL: int(user_input[CONF_SCAN_INTERVAL])},
             )
 
-        current = self.config_entry.options.get(
-            CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL
+        default = (
+            DEFAULT_ACCOUNT_SCAN_INTERVAL
+            if self.config_entry.data.get(CONF_ENTRY_TYPE) == ENTRY_TYPE_ACCOUNT
+            else DEFAULT_SCAN_INTERVAL
         )
+        current = self.config_entry.options.get(CONF_SCAN_INTERVAL, default)
 
         return self.async_show_form(
             step_id="init",

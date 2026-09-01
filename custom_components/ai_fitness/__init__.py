@@ -2,18 +2,33 @@
 
 from __future__ import annotations
 
-from homeassistant.const import Platform
+from homeassistant.const import CONF_PASSWORD, CONF_USERNAME, Platform
 from homeassistant.core import HomeAssistant
 
 from .const import CONF_STUDIO_ID
-from .coordinator import AiFitnessConfigEntry, AiFitnessCoordinator
+from .coordinator import (
+    AiFitnessCheckinCoordinator,
+    AiFitnessConfigEntry,
+    AiFitnessCoordinator,
+    is_account_entry,
+)
 
 PLATFORMS: list[Platform] = [Platform.BINARY_SENSOR, Platform.SENSOR]
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: AiFitnessConfigEntry) -> bool:
     """Set up AI Fitness from a config entry."""
-    coordinator = AiFitnessCoordinator(hass, entry, entry.data[CONF_STUDIO_ID])
+    coordinator: AiFitnessCheckinCoordinator | AiFitnessCoordinator
+    if is_account_entry(entry):
+        coordinator = AiFitnessCheckinCoordinator(
+            hass,
+            entry,
+            entry.data[CONF_USERNAME],
+            entry.data[CONF_PASSWORD],
+        )
+    else:
+        coordinator = AiFitnessCoordinator(hass, entry, entry.data[CONF_STUDIO_ID])
+
     await coordinator.async_config_entry_first_refresh()
 
     entry.runtime_data = coordinator
