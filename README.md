@@ -201,7 +201,22 @@ Nutzung und wird im Config-Entry mitgeführt.
   bringt nichts. Bitte fair pollen.
 - Check-ins ändern sich höchstens ein paar Mal am Tag — 30 Minuten reichen dort.
 - Diese Integration ist ein inoffizielles Community-Projekt und steht in keiner
-  Verbindung zu AI Fitness, Magicline oder ABC Fitness.
+  Verbindung zu AI Fitness, Magicline oder ABC Fitness. Das Logo gehört der
+  AI Fitness / all inclusive Fitness Deutschland GmbH und wird hier
+  ausschliesslich zur Kennzeichnung der Datenquelle verwendet.
+
+## Icon
+
+Die Brand-Assets liegen unter [`custom_components/ai_fitness/brand/`](custom_components/ai_fitness/brand/)
+(`icon.png` 256px, `icon@2x.png` 512px, dazu `logo*.png`) — das Rundlogo der App,
+transparent, beschnitten.
+
+> Home Assistant und HACS laden Integrations-Icons nicht aus dem Repository,
+> sondern von `brands.home-assistant.io`. Damit das Icon in der Oberfläche
+> erscheint, müssen die Dateien per PR nach
+> [home-assistant/brands](https://github.com/home-assistant/brands) unter
+> `custom_integrations/ai_fitness/` eingereicht werden. Bis dahin zeigt HA das
+> Standard-Puzzleteil — rein kosmetisch, die Integration funktioniert normal.
 
 ## Lizenz
 
