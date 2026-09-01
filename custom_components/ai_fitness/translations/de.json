@@ -1,0 +1,83 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "AI-Fitness-Studio hinzufügen",
+        "description": "Wie möchtest du dein Studio finden?",
+        "menu_options": {
+          "nearby": "Studios in meiner Nähe",
+          "search": "Nach Name oder Ort suchen",
+          "manual": "Studio-ID eingeben"
+        }
+      },
+      "nearby": {
+        "title": "Studios in deiner Nähe",
+        "description": "Sortiert nach Entfernung zu deinem Home-Assistant-Standort.",
+        "data": {
+          "studio_id": "Studio"
+        }
+      },
+      "search": {
+        "title": "Studio suchen",
+        "description": "Gib einen Ort, eine PLZ oder einen Teil des Studionamens ein.",
+        "data": {
+          "query": "Suchbegriff"
+        }
+      },
+      "pick": {
+        "title": "Studio auswählen",
+        "description": "{count} Studio(s) gefunden.",
+        "data": {
+          "studio_id": "Studio"
+        }
+      },
+      "manual": {
+        "title": "Studio-ID eingeben",
+        "description": "Die numerische ID von der Studio-Seite (Attribut `data-studio-id`).",
+        "data": {
+          "studio_id": "Studio-ID"
+        }
+      }
+    },
+    "error": {
+      "no_match": "Kein Studio zu diesem Suchbegriff gefunden.",
+      "invalid_id": "Eine Studio-ID besteht nur aus Ziffern."
+    },
+    "abort": {
+      "already_configured": "Dieses Studio ist bereits eingerichtet.",
+      "cannot_connect": "ai-fitness.de ist nicht erreichbar.",
+      "no_studios": "Die Studioliste kam leer zurück.",
+      "no_utilization": "Dieses Studio veröffentlicht keine Auslastungsdaten."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "AI-Fitness-Optionen",
+        "data": {
+          "scan_interval": "Aktualisierungsintervall"
+        },
+        "data_description": {
+          "scan_interval": "Wie oft die Auslastung abgefragt wird, in Minuten."
+        }
+      }
+    }
+  },
+  "entity": {
+    "sensor": {
+      "utilization": { "name": "Auslastung" },
+      "level": {
+        "name": "Auslastungsstufe",
+        "state": {
+          "LOW": "Niedrig",
+          "MEDIUM": "Mittel",
+          "HIGH": "Hoch"
+        }
+      },
+      "peak": { "name": "Tagesmaximum" }
+    },
+    "binary_sensor": {
+      "open": { "name": "Geöffnet" }
+    }
+  }
+}

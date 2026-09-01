@@ -1,0 +1,83 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Add an AI Fitness studio",
+        "description": "How would you like to find your studio?",
+        "menu_options": {
+          "nearby": "Studios near me",
+          "search": "Search by name or town",
+          "manual": "Enter a studio ID"
+        }
+      },
+      "nearby": {
+        "title": "Studios near you",
+        "description": "Sorted by distance from your Home Assistant location.",
+        "data": {
+          "studio_id": "Studio"
+        }
+      },
+      "search": {
+        "title": "Search for a studio",
+        "description": "Enter a town, postcode or part of the studio name.",
+        "data": {
+          "query": "Search term"
+        }
+      },
+      "pick": {
+        "title": "Pick your studio",
+        "description": "{count} studio(s) matched your search.",
+        "data": {
+          "studio_id": "Studio"
+        }
+      },
+      "manual": {
+        "title": "Enter a studio ID",
+        "description": "The numeric ID from the studio page (attribute `data-studio-id`).",
+        "data": {
+          "studio_id": "Studio ID"
+        }
+      }
+    },
+    "error": {
+      "no_match": "No studio matched that search term.",
+      "invalid_id": "A studio ID consists of digits only."
+    },
+    "abort": {
+      "already_configured": "This studio is already set up.",
+      "cannot_connect": "Could not reach ai-fitness.de.",
+      "no_studios": "The studio list came back empty.",
+      "no_utilization": "This studio does not publish any utilization data."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "AI Fitness options",
+        "data": {
+          "scan_interval": "Update interval"
+        },
+        "data_description": {
+          "scan_interval": "How often the utilization is polled, in minutes."
+        }
+      }
+    }
+  },
+  "entity": {
+    "sensor": {
+      "utilization": { "name": "Utilization" },
+      "level": {
+        "name": "Utilization level",
+        "state": {
+          "LOW": "Low",
+          "MEDIUM": "Medium",
+          "HIGH": "High"
+        }
+      },
+      "peak": { "name": "Daily peak" }
+    },
+    "binary_sensor": {
+      "open": { "name": "Open" }
+    }
+  }
+}
