@@ -3,9 +3,14 @@ Thin async client for the public AI Fitness (Magicline Connect) endpoints.
 
 Both endpoints are public — no authentication, no API key.
 
-Important: the upstream reverse proxy answers ``406 Not Acceptable`` when the
-request carries ``Accept: application/json``. Sending ``Accept: */*`` works, so
-the headers below must not be "helpfully" tightened.
+The data comes straight from Magicline's Connect API for the ``bestfit``
+tenant (the operator behind AI Fitness). Until the November 2026 website
+relaunch, ``www.ai-fitness.de/connect/...`` proxied the same routes; those now
+return 404, so the integration talks to Magicline directly.
+
+The old ai-fitness.de proxy answered ``406 Not Acceptable`` for
+``Accept: application/json``. Magicline itself accepts it, but ``*/*`` keeps
+working everywhere, so the headers below stay as they are.
 """
 
 from __future__ import annotations
@@ -19,7 +24,7 @@ import aiohttp
 
 _LOGGER = logging.getLogger(__name__)
 
-BASE_URL = "https://www.ai-fitness.de"
+BASE_URL = "https://bestfit.api.magicline.com"
 STUDIOS_PATH = "/connect/v2/studio"
 UTILIZATION_PATH = "/connect/v1/studio/{studio_id}/utilization"
 
@@ -37,7 +42,7 @@ REQUEST_HEADERS = {
         "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
         "(KHTML, like Gecko) Chrome/124.0 Safari/537.36"
     ),
-    # Must NOT be application/json — see module docstring.
+    # Kept permissive — see module docstring.
     "Accept": "*/*",
 }
 

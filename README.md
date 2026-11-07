@@ -5,9 +5,9 @@
 Bringt die **Live-Auslastung** deines AI-Fitness-Studios (all inclusive Fitness)
 und optional deine **Check-in-Historie** nach Home Assistant.
 
-Die Auslastung kommt aus der **öffentlichen** API von `ai-fitness.de` — kein
-Account, kein Login, kein API-Key; dieselbe Quelle wie das Auslastungs-Widget auf
-den Studio-Seiten. Für die Check-ins meldest du dich zusätzlich mit deinem
+Die Auslastung kommt aus der **öffentlichen** Magicline-Connect-API hinter
+AI Fitness — kein Account, kein Login, kein API-Key; dieselbe Quelle, die früher
+das Auslastungs-Widget auf den Studio-Seiten genutzt hat. Für die Check-ins meldest du dich zusätzlich mit deinem
 App-Account an — das ist optional, die Auslastung funktioniert ohne.
 
 ## Features
@@ -168,22 +168,29 @@ automation:
 
 ### Auslastung — öffentlich
 
-Zwei öffentliche Endpoints, beide ohne Authentifizierung:
+Zwei öffentliche Endpoints der Magicline-Connect-API (Tenant `bestfit`, der
+Betreiber hinter AI Fitness), beide ohne Authentifizierung:
 
 ```
-GET https://www.ai-fitness.de/connect/v2/studio
-GET https://www.ai-fitness.de/connect/v1/studio/{studioId}/utilization
+GET https://bestfit.api.magicline.com/connect/v2/studio
+GET https://bestfit.api.magicline.com/connect/v1/studio/{studioId}/utilization
 ```
 
 Der erste liefert alle Studios inklusive Koordinaten und Öffnungszeiten (deshalb
 braucht die Integration keine gepflegte Studioliste), der zweite die Auslastung.
 
-> ⚠️ Wer die API selbst anspricht: **niemals `Accept: application/json` senden** —
-> der Upstream antwortet darauf mit `406 Not Acceptable`. Mit `Accept: */*` oder
-> ganz ohne Accept-Header funktioniert es.
+Hinter Magicline läuft die Studioverwaltung, über die auch die Check-ins am
+Drehkreuz laufen — daher die Live-Daten.
 
-Dahinter steckt die **Magicline**-Studioverwaltung, über die auch die Check-ins
-am Drehkreuz laufen — daher die Live-Daten.
+> Bis Version 1.1.0 lief das über `www.ai-fitness.de/connect/...`. Seit dem
+> Relaunch der Website im November 2026 liefern diese Pfade `404`; die Integration
+> spricht Magicline deshalb direkt an. Die Studio-IDs sind unverändert, bestehende
+> Einträge laufen nach dem Update ohne Neueinrichtung weiter.
+>
+> Fallback, falls Magicline den Zugang irgendwann sperrt: die neue Website-API
+> `https://api.ai-fitness.de/api/studios/<slug>.json` liefert unter `status` den
+> aktuellen Wert (`occupancyPercent`, `currentOccupancy`) — allerdings ohne
+> Stundenprofil.
 
 ### Check-ins — authentifiziert
 
